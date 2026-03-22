@@ -60,7 +60,16 @@ class Expense(BaseModel):
     raw_ocr_text: Optional[str] = None
 
 class ExpenseCreate(BaseModel):
-    image_base64: str  # Base64 encoded image
+    image_base64: Optional[str] = None  # Base64 encoded image (optional for manual entry)
+
+class ExpenseManualCreate(BaseModel):
+    establishment_name: str
+    cif: Optional[str] = ""
+    address: Optional[str] = ""
+    phone: Optional[str] = ""
+    total: float = 0.0
+    date: Optional[str] = ""
+    payment_method: str = "efectivo"
 
 class ExpenseUpdate(BaseModel):
     establishment_name: Optional[str] = None
@@ -171,8 +180,19 @@ async def health_check():
 async def create_expense(expense_data: ExpenseCreate):
     """Create a new expense by uploading a ticket image"""
     try:
-        # Extract data from ticket using OCR
-        extracted_data = await extract_ticket_data(expense_data.image_base64)
+        # If image is provided, extract data using OCR
+        if expense_data.image_base64 and len(expense_data.image_base64) > 100:
+            extracted_data = await extract_ticket_data(expense_data.image_base64)
+        else:
+            extracted_data = {
+                "establishment_name": "",
+                "cif": "",
+                "address": "",
+                "phone": "",
+                "total": 0.0,
+                "date": "",
+                "payment_method": "efectivo"
+            }
         
         # Create expense object
         expense = Expense(
@@ -183,8 +203,8 @@ async def create_expense(expense_data: ExpenseCreate):
             total=float(extracted_data.get("total", 0.0)),
             date=extracted_data.get("date", ""),
             payment_method=extracted_data.get("payment_method", "efectivo"),
-            image_base64=expense_data.image_base64,
-            raw_ocr_text=str(extracted_data)
+            image_base64=expense_data.image_base64 if expense_data.image_base64 and len(expense_data.image_base64) > 100 else None,
+            raw_ocr_text=str(extracted_data) if expense_data.image_base64 and len(expense_data.image_base64) > 100 else None
         )
         
         # Save to database
@@ -195,6 +215,33 @@ async def create_expense(expense_data: ExpenseCreate):
         
     except Exception as e:
         logger.error(f"Error creating expense: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/expenses/manual", response_model=ExpenseResponse)
+async def create_manual_expense(expense_data: ExpenseManualCreate):
+    """Create a new expense manually without image"""
+    try:
+        # Create expense object
+        expense = Expense(
+            establishment_name=expense_data.establishment_name,
+            cif=expense_data.cif or "",
+            address=expense_data.address or "",
+            phone=expense_data.phone or "",
+            total=expense_data.total,
+            date=expense_data.date or "",
+            payment_method=expense_data.payment_method,
+            image_base64=None,
+            raw_ocr_text=None
+        )
+        
+        # Save to database
+        expense_dict = expense.model_dump()
+        await db.expenses.insert_one(expense_dict)
+        
+        return ExpenseResponse(**expense_dict)
+        
+    except Exception as e:
+        logger.error(f"Error creating manual expense: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/expenses", response_model=List[ExpenseResponse])

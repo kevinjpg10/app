@@ -11,6 +11,9 @@ import {
   RefreshControl,
   Platform,
   Linking,
+  TextInput,
+  KeyboardAvoidingView,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -39,6 +42,16 @@ interface Summary {
   cash_payments: { count: number; total: number };
 }
 
+interface EditFormData {
+  establishment_name: string;
+  cif: string;
+  address: string;
+  phone: string;
+  total: string;
+  date: string;
+  payment_method: string;
+}
+
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -47,6 +60,18 @@ export default function Index() {
   const [uploading, setUploading] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'card' | 'cash'>('all');
+  const [isEditing, setIsEditing] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState<EditFormData>({
+    establishment_name: '',
+    cif: '',
+    address: '',
+    phone: '',
+    total: '',
+    date: '',
+    payment_method: 'efectivo',
+  });
 
   const fetchExpenses = useCallback(async () => {
     try {
@@ -205,96 +230,374 @@ export default function Index() {
     }
   };
 
+  const startEditing = (expense: Expense) => {
+    setEditForm({
+      establishment_name: expense.establishment_name || '',
+      cif: expense.cif || '',
+      address: expense.address || '',
+      phone: expense.phone || '',
+      total: expense.total.toString(),
+      date: expense.date || '',
+      payment_method: expense.payment_method || 'efectivo',
+    });
+    setIsEditing(true);
+  };
+
+  const saveExpense = async () => {
+    if (!selectedExpense) return;
+    
+    setSaving(true);
+    try {
+      const response = await fetch(`${API_URL}/api/expenses/${selectedExpense.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          establishment_name: editForm.establishment_name,
+          cif: editForm.cif,
+          address: editForm.address,
+          phone: editForm.phone,
+          total: parseFloat(editForm.total) || 0,
+          date: editForm.date,
+          payment_method: editForm.payment_method,
+        }),
+      });
+
+      if (response.ok) {
+        const updatedExpense = await response.json();
+        setSelectedExpense(updatedExpense);
+        setIsEditing(false);
+        await loadData();
+        Alert.alert('Éxito', 'Gasto actualizado correctamente');
+      } else {
+        Alert.alert('Error', 'No se pudo actualizar el gasto');
+      }
+    } catch (error) {
+      console.error('Error saving expense:', error);
+      Alert.alert('Error', 'No se pudo guardar los cambios');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const createManualExpense = async () => {
+    if (!editForm.establishment_name.trim()) {
+      Alert.alert('Error', 'El nombre del establecimiento es obligatorio');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(`${API_URL}/api/expenses/manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          establishment_name: editForm.establishment_name,
+          cif: editForm.cif,
+          address: editForm.address,
+          phone: editForm.phone,
+          total: parseFloat(editForm.total) || 0,
+          date: editForm.date,
+          payment_method: editForm.payment_method,
+        }),
+      });
+
+      if (response.ok) {
+        setShowManualForm(false);
+        resetForm();
+        await loadData();
+        Alert.alert('Éxito', 'Gasto creado correctamente');
+      } else {
+        Alert.alert('Error', 'No se pudo crear el gasto');
+      }
+    } catch (error) {
+      console.error('Error creating manual expense:', error);
+      Alert.alert('Error', 'No se pudo crear el gasto');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetForm = () => {
+    setEditForm({
+      establishment_name: '',
+      cif: '',
+      address: '',
+      phone: '',
+      total: '',
+      date: '',
+      payment_method: 'efectivo',
+    });
+  };
+
   const filteredExpenses = expenses.filter((expense) => {
     if (activeTab === 'all') return true;
     if (activeTab === 'card') return expense.payment_method.toLowerCase() === 'tarjeta';
     return expense.payment_method.toLowerCase() !== 'tarjeta';
   });
 
-  const showImagePicker = () => {
+  const showAddOptions = () => {
     Alert.alert(
-      'Subir Ticket',
-      'Selecciona cómo quieres añadir el ticket',
+      'Añadir Gasto',
+      'Selecciona cómo quieres añadir el gasto',
       [
         { text: 'Cancelar', style: 'cancel' },
+        { text: 'Manual', onPress: () => { resetForm(); setShowManualForm(true); } },
         { text: 'Tomar Foto', onPress: takePhoto },
         { text: 'Galería', onPress: pickImage },
       ]
     );
   };
 
+  // Manual Form Modal
+  const renderManualFormModal = () => (
+    <Modal
+      visible={showManualForm}
+      animationType="slide"
+      transparent={false}
+    >
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setShowManualForm(false)} style={styles.backButton}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Nuevo Gasto Manual</Text>
+            <TouchableOpacity onPress={createManualExpense} style={styles.saveButton} disabled={saving}>
+              {saving ? (
+                <ActivityIndicator size="small" color="#4A90D9" />
+              ) : (
+                <Ionicons name="checkmark" size={24} color="#4A90D9" />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.formContainer}>
+            {renderFormFields()}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Modal>
+  );
+
+  const renderFormFields = () => (
+    <>
+      <View style={styles.formGroup}>
+        <Text style={styles.formLabel}>Establecimiento *</Text>
+        <TextInput
+          style={styles.formInput}
+          value={editForm.establishment_name}
+          onChangeText={(text) => setEditForm({ ...editForm, establishment_name: text })}
+          placeholder="Nombre del establecimiento"
+          placeholderTextColor="#666"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.formLabel}>CIF</Text>
+        <TextInput
+          style={styles.formInput}
+          value={editForm.cif}
+          onChangeText={(text) => setEditForm({ ...editForm, cif: text })}
+          placeholder="B12345678"
+          placeholderTextColor="#666"
+          autoCapitalize="characters"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.formLabel}>Dirección</Text>
+        <TextInput
+          style={styles.formInput}
+          value={editForm.address}
+          onChangeText={(text) => setEditForm({ ...editForm, address: text })}
+          placeholder="Calle, número, ciudad"
+          placeholderTextColor="#666"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.formLabel}>Teléfono</Text>
+        <TextInput
+          style={styles.formInput}
+          value={editForm.phone}
+          onChangeText={(text) => setEditForm({ ...editForm, phone: text })}
+          placeholder="912345678"
+          placeholderTextColor="#666"
+          keyboardType="phone-pad"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.formLabel}>Total (€) *</Text>
+        <TextInput
+          style={styles.formInput}
+          value={editForm.total}
+          onChangeText={(text) => setEditForm({ ...editForm, total: text.replace(',', '.') })}
+          placeholder="0.00"
+          placeholderTextColor="#666"
+          keyboardType="decimal-pad"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.formLabel}>Fecha</Text>
+        <TextInput
+          style={styles.formInput}
+          value={editForm.date}
+          onChangeText={(text) => setEditForm({ ...editForm, date: text })}
+          placeholder="DD/MM/YYYY"
+          placeholderTextColor="#666"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.formLabel}>Método de pago</Text>
+        <View style={styles.paymentToggle}>
+          <TouchableOpacity
+            style={[
+              styles.paymentOption,
+              editForm.payment_method === 'efectivo' && styles.paymentOptionActive,
+              editForm.payment_method === 'efectivo' && styles.cashActive,
+            ]}
+            onPress={() => setEditForm({ ...editForm, payment_method: 'efectivo' })}
+          >
+            <Ionicons name="cash" size={20} color={editForm.payment_method === 'efectivo' ? '#fff' : '#888'} />
+            <Text style={[
+              styles.paymentOptionText,
+              editForm.payment_method === 'efectivo' && styles.paymentOptionTextActive
+            ]}>Efectivo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.paymentOption,
+              editForm.payment_method === 'tarjeta' && styles.paymentOptionActive,
+              editForm.payment_method === 'tarjeta' && styles.cardActive,
+            ]}
+            onPress={() => setEditForm({ ...editForm, payment_method: 'tarjeta' })}
+          >
+            <Ionicons name="card" size={20} color={editForm.payment_method === 'tarjeta' ? '#fff' : '#888'} />
+            <Text style={[
+              styles.paymentOptionText,
+              editForm.payment_method === 'tarjeta' && styles.paymentOptionTextActive
+            ]}>Tarjeta</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+
+  // Detail/Edit View
   if (selectedExpense) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar style="light" />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setSelectedExpense(null)} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Detalle del Gasto</Text>
-          <TouchableOpacity onPress={() => deleteExpense(selectedExpense.id)} style={styles.deleteButton}>
-            <Ionicons name="trash-outline" size={24} color="#ff4444" />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.detailContainer}>
-          {selectedExpense.image_base64 && (
-            <Image
-              source={{ uri: `data:image/jpeg;base64,${selectedExpense.image_base64}` }}
-              style={styles.ticketImage}
-              resizeMode="contain"
-            />
-          )}
-
-          <View style={styles.detailCard}>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Establecimiento</Text>
-              <Text style={styles.detailValue}>{selectedExpense.establishment_name || 'No disponible'}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>CIF</Text>
-              <Text style={styles.detailValue}>{selectedExpense.cif || 'No disponible'}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Dirección</Text>
-              <Text style={styles.detailValue}>{selectedExpense.address || 'No disponible'}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Teléfono</Text>
-              <Text style={styles.detailValue}>{selectedExpense.phone || 'No disponible'}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Total</Text>
-              <Text style={styles.detailValueBold}>€{selectedExpense.total.toFixed(2)}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Fecha</Text>
-              <Text style={styles.detailValue}>{selectedExpense.date || 'No disponible'}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Método de pago</Text>
-              <View style={[
-                styles.paymentBadge,
-                selectedExpense.payment_method.toLowerCase() === 'tarjeta' ? styles.cardBadge : styles.cashBadge
-              ]}>
-                <Ionicons 
-                  name={selectedExpense.payment_method.toLowerCase() === 'tarjeta' ? 'card' : 'cash'} 
-                  size={16} 
-                  color="#fff" 
-                />
-                <Text style={styles.paymentBadgeText}>
-                  {selectedExpense.payment_method.charAt(0).toUpperCase() + selectedExpense.payment_method.slice(1)}
-                </Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => { setSelectedExpense(null); setIsEditing(false); }} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{isEditing ? 'Editar Gasto' : 'Detalle del Gasto'}</Text>
+            {isEditing ? (
+              <TouchableOpacity onPress={saveExpense} style={styles.saveButton} disabled={saving}>
+                {saving ? (
+                  <ActivityIndicator size="small" color="#4A90D9" />
+                ) : (
+                  <Ionicons name="checkmark" size={24} color="#4A90D9" />
+                )}
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.headerActions}>
+                <TouchableOpacity onPress={() => startEditing(selectedExpense)} style={styles.editButton}>
+                  <Ionicons name="pencil" size={22} color="#4A90D9" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => deleteExpense(selectedExpense.id)} style={styles.deleteButton}>
+                  <Ionicons name="trash-outline" size={22} color="#ff4444" />
+                </TouchableOpacity>
               </View>
-            </View>
+            )}
           </View>
-        </ScrollView>
+
+          <ScrollView style={styles.detailContainer}>
+            {!isEditing && selectedExpense.image_base64 && selectedExpense.image_base64.length > 100 && (
+              <Image
+                source={{ uri: `data:image/jpeg;base64,${selectedExpense.image_base64}` }}
+                style={styles.ticketImage}
+                resizeMode="contain"
+              />
+            )}
+
+            {isEditing ? (
+              <View style={styles.formContainer}>
+                {renderFormFields()}
+                <TouchableOpacity 
+                  style={styles.cancelEditButton}
+                  onPress={() => setIsEditing(false)}
+                >
+                  <Text style={styles.cancelEditButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.detailCard}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Establecimiento</Text>
+                  <Text style={styles.detailValue}>{selectedExpense.establishment_name || 'No disponible'}</Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>CIF</Text>
+                  <Text style={styles.detailValue}>{selectedExpense.cif || 'No disponible'}</Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Dirección</Text>
+                  <Text style={styles.detailValue}>{selectedExpense.address || 'No disponible'}</Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Teléfono</Text>
+                  <Text style={styles.detailValue}>{selectedExpense.phone || 'No disponible'}</Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Total</Text>
+                  <Text style={styles.detailValueBold}>€{selectedExpense.total.toFixed(2)}</Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Fecha</Text>
+                  <Text style={styles.detailValue}>{selectedExpense.date || 'No disponible'}</Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Método de pago</Text>
+                  <View style={[
+                    styles.paymentBadge,
+                    selectedExpense.payment_method.toLowerCase() === 'tarjeta' ? styles.cardBadge : styles.cashBadge
+                  ]}>
+                    <Ionicons 
+                      name={selectedExpense.payment_method.toLowerCase() === 'tarjeta' ? 'card' : 'cash'} 
+                      size={16} 
+                      color="#fff" 
+                    />
+                    <Text style={styles.paymentBadgeText}>
+                      {selectedExpense.payment_method.charAt(0).toUpperCase() + selectedExpense.payment_method.slice(1)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -302,6 +605,8 @@ export default function Index() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
+      
+      {renderManualFormModal()}
       
       {/* Header */}
       <View style={styles.header}>
@@ -376,7 +681,7 @@ export default function Index() {
             <View style={styles.emptyContainer}>
               <Ionicons name="receipt-outline" size={64} color="#444" />
               <Text style={styles.emptyText}>No hay gastos registrados</Text>
-              <Text style={styles.emptySubtext}>Sube un ticket para empezar</Text>
+              <Text style={styles.emptySubtext}>Sube un ticket o añade manualmente</Text>
             </View>
           ) : (
             filteredExpenses.map((expense) => (
@@ -421,8 +726,8 @@ export default function Index() {
           <Text style={styles.uploadingText}>Procesando ticket con IA...</Text>
         </View>
       ) : (
-        <TouchableOpacity style={styles.fab} onPress={showImagePicker}>
-          <Ionicons name="camera" size={28} color="#fff" />
+        <TouchableOpacity style={styles.fab} onPress={showAddOptions}>
+          <Ionicons name="add" size={32} color="#fff" />
         </TouchableOpacity>
       )}
     </SafeAreaView>
@@ -451,6 +756,10 @@ const styles = StyleSheet.create({
     color: '#888',
     marginTop: 2,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   downloadButton: {
     width: 44,
     height: 44,
@@ -460,6 +769,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1a1a1a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1a1a1a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  saveButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -618,10 +944,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#4A90D9',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#4A90D9',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 8,
   },
   uploadingContainer: {
@@ -701,5 +1023,72 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 6,
+  },
+  // Form styles
+  formContainer: {
+    paddingHorizontal: 4,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  formLabel: {
+    color: '#888',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  formInput: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 16,
+    color: '#fff',
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  paymentToggle: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  paymentOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  paymentOptionActive: {
+    borderWidth: 0,
+  },
+  cashActive: {
+    backgroundColor: '#27AE60',
+  },
+  cardActive: {
+    backgroundColor: '#9B59B6',
+  },
+  paymentOptionText: {
+    color: '#888',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  paymentOptionTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  cancelEditButton: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 40,
+  },
+  cancelEditButtonText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
