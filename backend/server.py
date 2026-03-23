@@ -108,9 +108,10 @@ class ExpenseResponse(BaseModel):
 
 # ============= OCR Function =============
 
-
+#async def extract_ticket_data(image_base64: str) -> dict:
 async def extract_ticket_data(image_base64: str) -> dict:
     return {}
+
 #    """Use GPT-4o to extract data from a ticket image""" #   try:
 #        chat = LlmChat(
 #            api_key=EMERGENT_LLM_KEY,
