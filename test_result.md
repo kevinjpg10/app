@@ -210,6 +210,54 @@ backend:
         agent: "testing"
         comment: "Excel export working correctly. Generates proper XLSX file with correct content-type headers, includes all 3 sheets (all expenses, card payments, cash payments) with proper formatting and totals."
 
+  - task: "Get categories list (GET /api/categories)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Categories endpoint working correctly. Returns all expected categories: Comida, Gasolina, Transporte, Alojamiento, Material, Varios"
+
+  - task: "Create manual expense (POST /api/expenses/manual)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Manual expense creation working correctly. Successfully creates expenses without image upload, properly saves all fields including establishment_name, total, date, payment_method, and category"
+
+  - task: "Toggle payment method (PATCH /api/expenses/{id}/payment-method)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Payment method toggle working correctly. Successfully toggles between 'tarjeta' and 'efectivo', returns updated expense data"
+
+  - task: "Export to PDF (GET /api/expenses/export/pdf)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "PDF export working correctly. Generates proper PDF report with correct content-type headers (application/pdf), includes summary statistics, categories breakdown, and detailed expense list"
+
 frontend:
   - task: "Main screen with expense list and summary"
     implemented: true
@@ -288,3 +336,5 @@ agent_communication:
     message: "MVP implementation complete. Please test all backend endpoints. For OCR testing, use a real receipt image in base64. Check /app/image_testing.md for image handling rules."
   - agent: "testing"
     message: "Backend testing complete. All 7 backend endpoints working correctly. Fixed OCR issue by changing UserMessage parameter from 'image_contents' to 'file_contents'. GPT-4o OCR integration fully functional. All CRUD operations, Excel export, and summary stats working. Error handling for non-existent resources proper (404 responses). Ready for frontend testing or production deployment."
+  - agent: "testing"
+    message: "Comprehensive backend API testing completed successfully. Tested ALL 11 endpoints as requested: Root, Health, Categories, Get Expenses, Summary Stats, Manual Expense Creation, Update Expense, Toggle Payment Method, Excel Export, PDF Export, and Delete Expense. All endpoints working perfectly with correct status codes, proper MIME types for downloads, and accurate data handling. Summary includes categories breakdown as required. Payment method toggle works correctly. Both Excel and PDF exports generate proper files with correct content-type headers. Backend API is fully functional and ready for production use."
