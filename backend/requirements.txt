@@ -10,3 +10,6 @@ python-jose[cryptography]
 pydantic-settings
 openpyxl
 pandas
+reportlab
+email-validator
+httpx
