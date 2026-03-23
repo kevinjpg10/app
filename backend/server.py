@@ -108,11 +108,13 @@ class ExpenseResponse(BaseModel):
 
 # ============= OCR Function =============
 
+
+# async def extract_ticket_data(image_base64: str) -> dict:
 async def extract_ticket_data(image_base64: str) -> dict:
-    """Use GPT-4o to extract data from a ticket image"""
-    try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
+    return {}
+#    """Use GPT-4o to extract data from a ticket image""" #   try:
+#        chat = LlmChat(
+#            api_key=EMERGENT_LLM_KEY,
             session_id=f"ticket-ocr-{uuid.uuid4()}",
             system_message="""Eres un experto en extraer datos de tickets y facturas españolas.
             Tu tarea es analizar la imagen del ticket y extraer la siguiente información:
