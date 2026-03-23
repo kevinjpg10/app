@@ -13,6 +13,5 @@ pandas
 reportlab
 email-validator
 httpx
-emergentintegrations
 openai
 anthropic
