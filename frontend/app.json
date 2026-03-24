@@ -16,6 +16,7 @@
       }
     },
     "android": {
+      "package": "com.tu_nombre.efraingastos",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000"
