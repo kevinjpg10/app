@@ -108,88 +108,88 @@ class ExpenseResponse(BaseModel):
 
 # ============= OCR Function =============
 
-#async def extract_ticket_data(image_base64: str) -> dict:
 async def extract_ticket_data(image_base64: str) -> dict:
     return {}
-#    """Use GPT-4o to extract data from a ticket image""" #   try:
+#    """Use GPT-4o to extract data from a ticket image"""
+#    try:
 #        chat = LlmChat(
 #            api_key=EMERGENT_LLM_KEY,
-            session_id=f"ticket-ocr-{uuid.uuid4()}",
-            system_message="""Eres un experto en extraer datos de tickets y facturas españolas.
-            Tu tarea es analizar la imagen del ticket y extraer la siguiente información:
-            - Nombre del establecimiento
-            - CIF (número de identificación fiscal)
-            - Dirección
-            - Teléfono
-            - Total pagado (solo el número)
-            - Fecha (en formato DD/MM/YYYY)
-            - Método de pago (determinar si fue "tarjeta" o "efectivo" basándote en indicios del ticket)
-            - Categoría del gasto (una de: "Comida", "Gasolina", "Transporte", "Alojamiento", "Material", "Varios")
-            
-            Para determinar la categoría:
-            - Comida: restaurantes, cafeterías, supermercados, bares, fast food
-            - Gasolina: gasolineras, estaciones de servicio
-            - Transporte: taxis, uber, autobuses, trenes, aviones, parking
-            - Alojamiento: hoteles, hostales, airbnb
-            - Material: papelerías, ferreterías, tiendas de suministros
-            - Varios: todo lo demás
-            
-            Responde SIEMPRE en formato JSON con estas claves exactas:
-            {
-                "establishment_name": "nombre",
-                "cif": "número CIF",
-                "address": "dirección completa",
-                "phone": "teléfono",
-                "total": 0.00,
-                "date": "DD/MM/YYYY",
-                "payment_method": "tarjeta" o "efectivo",
-                "category": "categoría"
-            }
-            
-            Si no puedes encontrar algún dato, usa una cadena vacía para textos o 0.0 para números.
-            Para el método de pago, busca palabras clave como "VISA", "MASTERCARD", "TARJETA", "EFECTIVO", "CAMBIO" (si hay cambio, probablemente es efectivo).
-            Si no hay indicios claros, asume "efectivo".
-            """
-        ).with_model("openai", "gpt-4o")
-        
-        # Create image content
-        image_content = ImageContent(image_base64=image_base64)
-        
-        # Create message with image
-        user_message = UserMessage(
-            text="Por favor, extrae todos los datos de este ticket. Responde solo con el JSON, sin explicaciones adicionales.",
-            file_contents=[image_content]
-        )
-        
-        # Send message and get response
-        response = await chat.send_message(user_message)
-        logger.info(f"OCR Response: {response}")
-        
-        # Parse JSON from response
-        import json
-        # Clean the response - remove markdown code blocks if present
-        clean_response = response.strip()
-        if clean_response.startswith("```"):
-            clean_response = clean_response.split("```")[1]
-            if clean_response.startswith("json"):
-                clean_response = clean_response[4:]
-        clean_response = clean_response.strip()
-        
-        data = json.loads(clean_response)
-        return data
-        
-    except Exception as e:
-        logger.error(f"Error extracting ticket data: {e}")
-        return {
-            "establishment_name": "",
-            "cif": "",
-            "address": "",
-            "phone": "",
-            "total": 0.0,
-            "date": "",
-            "payment_method": "efectivo",
-            "error": str(e)
-        }
+#            session_id=f"ticket-ocr-{uuid.uuid4()}",
+#            system_message="""Eres un experto en extraer datos de tickets y facturas españolas.
+#            Tu tarea es analizar la imagen del ticket y extraer la siguiente información:
+#            - Nombre del establecimiento
+#            - CIF (número de identificación fiscal)
+#            - Dirección
+#            - Teléfono
+#            - Total pagado (solo el número)
+#            - Fecha (en formato DD/MM/YYYY)
+#            - Método de pago (determinar si fue "tarjeta" o "efectivo" basándote en indicios del ticket)
+#            - Categoría del gasto (una de: "Comida", "Gasolina", "Transporte", "Alojamiento", "Material", "Varios")
+#            
+#            Para determinar la categoría:
+#            - Comida: restaurantes, cafeterías, supermercados, bares, fast food
+#            - Gasolina: gasolineras, estaciones de servicio
+#            - Transporte: taxis, uber, autobuses, trenes, aviones, parking
+#            - Alojamiento: hoteles, hostales, airbnb
+#            - Material: papelerías, ferreterías, tiendas de suministros
+#            - Varios: todo lo demás
+#            
+#            Responde SIEMPRE en formato JSON con estas claves exactas:
+#            {
+#                "establishment_name": "nombre",
+#                "cif": "número CIF",
+#                "address": "dirección completa",
+#                "phone": "teléfono",
+#                "total": 0.00,
+#                "date": "DD/MM/YYYY",
+#                "payment_method": "tarjeta" o "efectivo",
+#                "category": "categoría"
+#            }
+#            
+#            Si no puedes encontrar algún dato, usa una cadena vacía para textos o 0.0 para números.
+#            Para el método de pago, busca palabras clave como "VISA", "MASTERCARD", "TARJETA", "EFECTIVO", "CAMBIO" (si hay cambio, probablemente es efectivo).
+#            Si no hay indicios claros, asume "efectivo".
+#            """
+#        ).with_model("openai", "gpt-4o")
+#        
+#        # Create image content
+#        image_content = ImageContent(image_base64=image_base64)
+#        
+#        # Create message with image
+#        user_message = UserMessage(
+#            text="Por favor, extrae todos los datos de este ticket. Responde solo con el JSON, sin explicaciones adicionales.",
+#            file_contents=[image_content]
+#        )
+#        
+#        # Send message and get response
+#        response = await chat.send_message(user_message)
+#        logger.info(f"OCR Response: {response}")
+#        
+#        # Parse JSON from response
+#        import json
+#        # Clean the response - remove markdown code blocks if present
+#        clean_response = response.strip()
+#        if clean_response.startswith("```"):
+#            clean_response = clean_response.split("```")[1]
+#            if clean_response.startswith("json"):
+#                clean_response = clean_response[4:]
+#        clean_response = clean_response.strip()
+#        
+#        data = json.loads(clean_response)
+#        return data
+#        
+#    except Exception as e:
+#        logger.error(f"Error extracting ticket data: {e}")
+#        return {
+#            "establishment_name": "",
+#            "cif": "",
+#            "address": "",
+#            "phone": "",
+#            "total": 0.0,
+#            "date": "",
+#            "payment_method": "efectivo",
+#            "error": str(e)
+#        }
 
 # ============= Routes =============
 
