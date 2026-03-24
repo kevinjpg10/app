@@ -30,7 +30,7 @@ jobs:
 
            - name: Build APK
         working-directory: ./frontend
-        run: |
+        run: yarn install
           npx eas-cli project:init --non-interactive --force
           npx eas-cli build --platform android --profile preview --non-interactive --no-wait
 
