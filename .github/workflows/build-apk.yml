@@ -25,7 +25,8 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm install
+        run: yarn install
+
 
            - name: Build APK
         working-directory: ./frontend
