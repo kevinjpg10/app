@@ -8,29 +8,48 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: '18'
 
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
+      - name: Setup Java
+        uses: actions/setup-java@v3
         with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Install dependencies
         working-directory: ./frontend
         run: yarn install
 
-      - name: Remove expo-splash-screen plugin
+      - name: Remove expo-splash-screen
         working-directory: ./frontend
         run: yarn remove expo-splash-screen || true
 
-      - name: Build APK
+      - name: Expo prebuild
         working-directory: ./frontend
-        run: eas build --platform android --profile preview --non-interactive
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Make gradlew executable
+        working-directory: ./frontend/android
+        run: chmod +x gradlew
+
+      - name: Build APK
+        working-directory: ./frontend/android
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: efrain-gastos-debug
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
