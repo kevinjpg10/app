@@ -3,7 +3,7 @@ name: Build Android APK (Expo)
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Permite lanzarlo manualmente desde GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -27,8 +27,10 @@ jobs:
         working-directory: ./frontend
         run: yarn install
 
+      - name: Remove expo-splash-screen plugin
+        working-directory: ./frontend
+        run: yarn remove expo-splash-screen || true
+
       - name: Build APK
         working-directory: ./frontend
         run: eas build --platform android --profile preview --non-interactive
-
-
