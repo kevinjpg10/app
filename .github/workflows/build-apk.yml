@@ -3,7 +3,7 @@ name: Build Android APK (Expo)
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: # Permite lanzarlo manualmente desde GitHub
 
 jobs:
   build:
@@ -27,10 +27,8 @@ jobs:
         working-directory: ./frontend
         run: yarn install
 
-
-           - name: Build APK
+      - name: Build APK
         working-directory: ./frontend
-        run: yarn install
-          npx eas-cli project:init --non-interactive --force
-          npx eas-cli build --platform android --profile preview --non-interactive --no-wait
+        run: eas build --platform android --profile preview --non-interactive
+
 
