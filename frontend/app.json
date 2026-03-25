@@ -6,7 +6,13 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "android": {
-      "package": "com.efrain.gastos"
+      "package": "com.efrain.gastos",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000"
+      }
+    },
+    "ios": {
+      "supportsTablet": true
     }
   }
 }
