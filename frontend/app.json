@@ -5,14 +5,20 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "android": {
-      "package": "com.efrain.gastos",
-      "adaptiveIcon": {
-        "backgroundColor": "#000000"
-      }
-    },
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
+    },
+    "android": {
+      "package": "com.efrain.gastos",
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "experiments": {
+      "typedRoutes": true
     }
   }
 }
