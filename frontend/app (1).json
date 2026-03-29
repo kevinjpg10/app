@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Efrain Gastos",
+    "slug": "efrain-gastos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "com.efrain.gastos",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "74e703ae-41a8-4000-9d0d-11d813003859"
+      }
+    }
+  }
+}
