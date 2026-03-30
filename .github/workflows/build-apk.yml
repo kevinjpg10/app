@@ -1,4 +1,4 @@
-name: Build Android APK (Expo)
+name: Build Android APK Release
 
 on:
   push:
@@ -29,27 +29,63 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: yarn install
-
-      - name: Remove expo-splash-screen
-        working-directory: ./frontend
-        run: yarn remove expo-splash-screen || true
+        run: yarn install --frozen-lockfile
 
       - name: Expo prebuild
         working-directory: ./frontend
         run: npx expo prebuild --platform android --no-install
 
+      - name: Generate Keystore
+        run: |
+          keytool -genkeypair \
+            -v \
+            -keystore efrain-release.keystore \
+            -alias efrain-key \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass efrain1234 \
+            -keypass efrain1234 \
+            -dname "CN=Efrain Gastos, OU=App, O=Efrain, L=Madrid, S=Madrid, C=ES"
+
+      - name: Copy keystore to android folder
+        run: cp efrain-release.keystore frontend/android/app/efrain-release.keystore
+
+      - name: Configure signing in gradle
+        working-directory: ./frontend/android
+        run: |
+          cat >> app/build.gradle << 'GRADLE'
+
+          android {
+            signingConfigs {
+              release {
+                storeFile file("efrain-release.keystore")
+                storePassword "efrain1234"
+                keyAlias "efrain-key"
+                keyPassword "efrain1234"
+              }
+            }
+            buildTypes {
+              release {
+                signingConfig signingConfigs.release
+                minifyEnabled false
+                shrinkResources false
+              }
+            }
+          }
+          GRADLE
+
       - name: Make gradlew executable
         working-directory: ./frontend/android
         run: chmod +x gradlew
 
-      - name: Build APK
+      - name: Build Release APK
         working-directory: ./frontend/android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: efrain-gastos-release
           path: frontend/android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 7
+          retention-days: 30
