@@ -14,12 +14,10 @@ import { PieChart } from 'react-native-gifted-charts';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-// ---------------------------
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const screenWidth = Dimensions.get('window').width;
 
-// (Interfaces mantenidas igual)
 interface Expense { id: string; establishment_name: string; cif: string; address: string; phone: string; total: number; date: string; payment_method: string; category: string; image_base64?: string; created_at: string; }
 interface Summary { total_expenses: number; total_amount: number; card_payments: { count: number; total: number }; cash_payments: { count: number; total: number }; categories: { [key: string]: { count: number; total: number; percentage: number } }; }
 interface EditFormData { establishment_name: string; cif: string; address: string; phone: string; total: string; date: string; payment_method: string; category: string; }
@@ -46,18 +44,11 @@ export default function Index() {
   // --- FUNCIÓN MÁGICA DE GEMINI ---
   const analyzeWithGemini = async (base64: string) => {
     try {
-      const prompt = `Analiza este ticket de compra. Extrae los datos y responde EXCLUSIVAMENTE con un objeto JSON con este formato:
-      {"establecimiento": "nombre", "total": 0.00, "fecha": "DD/MM/YYYY", "cif": "B123...", "direccion": "calle...", "telefono": "123...", "categoria": "Comida o Gasolina o Transporte o Alojamiento o Material o Varios"}
-      Si no ves un dato, pon "". Categoría debe ser una de la lista.`;
-
-      const result = await model.generateContent([
-        prompt,
-        { inlineData: { data: base64, mimeType: "image/jpeg" } }
-      ]);
+      const prompt = `Analiza este ticket. Responde SOLO con un JSON: {"establecimiento": "nombre", "total": 0.00, "fecha": "DD/MM/YYYY", "cif": "", "direccion": "", "telefono": "", "categoria": "Comida o Gasolina o Transporte o Alojamiento o Material o Varios"}`;
+      const result = await model.generateContent([prompt, { inlineData: { data: base64, mimeType: "image/jpeg" } }]);
       const response = await result.response;
-      const jsonStr = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-      const data = JSON.parse(jsonStr);
-
+      const data = JSON.parse(response.text().replace(/```json/g, "").replace(/```/g, ""));
+      
       setEditForm({
         establishment_name: data.establecimiento || '',
         cif: data.cif || '',
@@ -68,27 +59,24 @@ export default function Index() {
         payment_method: 'efectivo',
         category: data.categoria || 'Varios',
       });
-      setShowManualForm(true); // Abrimos el formulario ya rellenado
+      setShowManualForm(true);
     } catch (error) {
-      console.error("Error en Gemini:", error);
-      Alert.alert("Aviso", "La IA no pudo leer el ticket, pero puedes rellenarlo manualmente.");
       setShowManualForm(true);
     }
   };
-  // ---------------------------------
 
   const fetchExpenses = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/api/expenses`);
       if (response.ok) setExpenses(await response.json());
-    } catch (error) { console.error('Error fetching expenses:', error); }
+    } catch (e) { console.error(e); }
   }, []);
 
   const fetchSummary = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/api/expenses/summary/stats`);
       if (response.ok) setSummary(await response.json());
-    } catch (error) { console.error('Error fetching summary:', error); }
+    } catch (e) { console.error(e); }
   }, []);
 
   const loadData = useCallback(async () => {
@@ -105,26 +93,10 @@ export default function Index() {
     setRefreshing(false);
   }, [loadData]);
 
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, quality: 0.7, base64: true,
-    });
-    if (!result.canceled && result.assets[0].base64) {
-      setUploading(true);
-      await analyzeWithGemini(result.assets[0].base64);
-      setUploading(false);
-    }
-  };
-
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') return;
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true, quality: 0.7, base64: true,
-    });
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7, base64: true });
     if (!result.canceled && result.assets[0].base64) {
       setUploading(true);
       await analyzeWithGemini(result.assets[0].base64);
@@ -132,6 +104,83 @@ export default function Index() {
     }
   };
 
-  // (Mantenemos el resto de funciones: createManualExpense, delete, etc. del código original)
-  // [AQUÍ VA EL RESTO DE TU CÓDIGO ORIGINAL DESDE createManualExpense HACIA ABAJO]
-  // ... (Me salto el resto por espacio, pero mantén tus funciones de guardado y los estilos)
+  const createManualExpense = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch(`${API_URL}/api/expenses/manual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...editForm, total: parseFloat(editForm.total) || 0 }),
+      });
+      if (response.ok) {
+        setShowManualForm(false);
+        await loadData();
+        Alert.alert('Éxito', 'Gasto guardado correctamente');
+      }
+    } catch (e) { Alert.alert('Error', 'No se pudo guardar'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="light" />
+      
+      {/* Botón Flotante */}
+      <TouchableOpacity style={styles.fab} onPress={takePhoto}>
+        {uploading ? <ActivityIndicator color="#fff" /> : <Ionicons name="camera" size={32} color="#fff" />}
+      </TouchableOpacity>
+
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Efrain Gastos 🤖</Text>
+      </View>
+
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        {expenses.length === 0 ? (
+          <View style={styles.emptyContainer}><Text style={styles.emptyText}>No hay gastos aún</Text></View>
+        ) : (
+          expenses.map(exp => (
+            <View key={exp.id} style={styles.expenseCard}>
+              <Text style={styles.expenseName}>{exp.establishment_name}</Text>
+              <Text style={styles.expenseAmount}>€{exp.total.toFixed(2)}</Text>
+            </View>
+          ))
+        )}
+      </ScrollView>
+
+      {/* Modal de Confirmación IA */}
+      <Modal visible={showManualForm} animationType="slide">
+        <SafeAreaView style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setShowManualForm(false)}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
+            <Text style={styles.headerTitle}>Confirmar Datos</Text>
+            <TouchableOpacity onPress={createManualExpense} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#4A90D9" /> : <Ionicons name="checkmark" size={24} color="#4A90D9" />}
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={{ padding: 20 }}>
+            <Text style={styles.formLabel}>Establecimiento</Text>
+            <TextInput style={styles.formInput} value={editForm.establishment_name} onChangeText={(t) => setEditForm({...editForm, establishment_name: t})} />
+            <Text style={styles.formLabel}>Total (€)</Text>
+            <TextInput style={styles.formInput} keyboardType="decimal-pad" value={editForm.total} onChangeText={(t) => setEditForm({...editForm, total: t})} />
+            <Text style={styles.formLabel}>Fecha</Text>
+            <TextInput style={styles.formInput} value={editForm.date} onChangeText={(t) => setEditForm({...editForm, date: t})} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, paddingTop: 40, borderBottomWidth: 1, borderBottomColor: '#222' },
+  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  expenseCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, marginHorizontal: 20, marginVertical: 5, backgroundColor: '#1a1a1a', borderRadius: 10 },
+  expenseName: { color: '#fff', fontSize: 16 },
+  expenseAmount: { color: '#4A90D9', fontWeight: 'bold' },
+  emptyContainer: { alignItems: 'center', marginTop: 100 },
+  emptyText: { color: '#666' },
+  fab: { position: 'absolute', bottom: 30, right: 30, backgroundColor: '#4A90D9', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', zIndex: 999 },
+  formLabel: { color: '#888', marginBottom: 5 },
+  formInput: { backgroundColor: '#1a1a1a', color: '#fff', padding: 15, borderRadius: 10, marginBottom: 20 }
+});
