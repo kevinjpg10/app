@@ -12,14 +12,11 @@ import uuid
 from datetime import datetime
 import io
 import httpx
-import base64
 import json
 
-# Excel generation
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
-# PDF generation
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -29,18 +26,14 @@ from reportlab.lib.units import cm
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'efrain_gastos')]
 
-# Gemini API Key
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
-# Categories for expenses
 EXPENSE_CATEGORIES = ["Comida", "Gasolina", "Transporte", "Alojamiento", "Material", "Varios"]
 
-# Create the main app
 app = FastAPI(title="Efrain Asistente de Gastos API")
 api_router = APIRouter(prefix="/api")
 
@@ -99,62 +92,43 @@ class ExpenseResponse(BaseModel):
     image_base64: Optional[str] = None
     created_at: datetime
 
-# ============= Gemini OCR Function =============
+# ============= Gemini OCR =============
 
 async def extract_ticket_data(image_base64: str) -> dict:
-    """Use Gemini 2.5 Flash to extract data from a ticket image"""
     if not GEMINI_API_KEY:
-        logger.warning("GEMINI_API_KEY not set, returning empty data")
-        return {
-            "establishment_name": "", "cif": "", "address": "", "phone": "",
-            "total": 0.0, "date": "", "payment_method": "efectivo", "category": "Varios"
-        }
+        logger.warning("GEMINI_API_KEY not set")
+        return {"establishment_name": "", "cif": "", "address": "", "phone": "",
+                "total": 0.0, "date": "", "payment_method": "efectivo", "category": "Varios"}
     try:
         prompt = """Eres un experto en extraer datos de tickets y facturas españolas.
-Analiza la imagen del ticket y extrae la siguiente información:
-- Nombre del establecimiento
-- CIF (número de identificación fiscal)
-- Dirección completa
-- Teléfono
-- Total pagado (solo el número, sin símbolo €)
-- Fecha en formato DD/MM/YYYY
-- Método de pago: "tarjeta" si ves VISA/MASTERCARD/TARJETA, "efectivo" si hay CAMBIO o no hay indicios de tarjeta
-- Categoría: una de estas exactas: "Comida", "Gasolina", "Transporte", "Alojamiento", "Material", "Varios"
-  - Comida: restaurantes, cafeterías, supermercados, bares, fast food
-  - Gasolina: gasolineras, estaciones de servicio
-  - Transporte: taxis, uber, autobuses, trenes, aviones, parking
-  - Alojamiento: hoteles, hostales, airbnb
-  - Material: papelerías, ferreterías, tiendas de suministros
-  - Varios: todo lo demás
-
-Responde ÚNICAMENTE con un JSON válido, sin markdown, sin explicaciones:
+Analiza la imagen y extrae la información. Responde ÚNICAMENTE con JSON válido sin markdown:
 {
-  "establishment_name": "nombre",
-  "cif": "número CIF o vacío",
+  "establishment_name": "nombre del establecimiento",
+  "cif": "CIF o vacío",
   "address": "dirección completa o vacío",
   "phone": "teléfono o vacío",
   "total": 0.00,
   "date": "DD/MM/YYYY o vacío",
   "payment_method": "tarjeta o efectivo",
-  "category": "categoría exacta"
-}"""
+  "category": "Comida|Gasolina|Transporte|Alojamiento|Material|Varios"
+}
+Reglas:
+- payment_method: "tarjeta" si ves VISA/MASTERCARD/TARJETA, sino "efectivo"
+- category Comida: restaurantes, cafeterías, supermercados, bares
+- category Gasolina: gasolineras
+- category Transporte: taxis, uber, tren, avión, parking
+- category Alojamiento: hoteles, hostales
+- category Material: papelerías, ferreterías
+- category Varios: todo lo demás"""
 
         payload = {
             "contents": [{
                 "parts": [
                     {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": "image/jpeg",
-                            "data": image_base64
-                        }
-                    }
+                    {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}}
                 ]
             }],
-            "generationConfig": {
-                "temperature": 0.1,
-                "maxOutputTokens": 1024,
-            }
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 1024}
         }
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
@@ -164,10 +138,7 @@ Responde ÚNICAMENTE con un JSON válido, sin markdown, sin explicaciones:
             response.raise_for_status()
             result = response.json()
 
-        # Extract text from response
         text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
-
-        # Clean markdown if present
         if text.startswith("```"):
             text = text.split("```")[1]
             if text.startswith("json"):
@@ -175,16 +146,13 @@ Responde ÚNICAMENTE con un JSON válido, sin markdown, sin explicaciones:
         text = text.strip()
 
         data = json.loads(text)
-        logger.info(f"Gemini OCR result: {data}")
+        logger.info(f"Gemini OCR: {data}")
         return data
 
     except Exception as e:
-        logger.error(f"Error extracting ticket data with Gemini: {e}")
-        return {
-            "establishment_name": "", "cif": "", "address": "", "phone": "",
-            "total": 0.0, "date": "", "payment_method": "efectivo",
-            "category": "Varios", "error": str(e)
-        }
+        logger.error(f"Gemini error: {e}")
+        return {"establishment_name": "", "cif": "", "address": "", "phone": "",
+                "total": 0.0, "date": "", "payment_method": "efectivo", "category": "Varios"}
 
 # ============= Routes =============
 
@@ -194,7 +162,7 @@ async def root():
 
 @api_router.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "efrain-gastos", "gemini": bool(GEMINI_API_KEY)}
+    return {"status": "healthy", "gemini": bool(GEMINI_API_KEY)}
 
 @api_router.post("/expenses", response_model=ExpenseResponse)
 async def create_expense(expense_data: ExpenseCreate):
@@ -202,10 +170,8 @@ async def create_expense(expense_data: ExpenseCreate):
         if expense_data.image_base64 and len(expense_data.image_base64) > 100:
             extracted_data = await extract_ticket_data(expense_data.image_base64)
         else:
-            extracted_data = {
-                "establishment_name": "", "cif": "", "address": "", "phone": "",
-                "total": 0.0, "date": "", "payment_method": "efectivo", "category": "Varios"
-            }
+            extracted_data = {"establishment_name": "", "cif": "", "address": "", "phone": "",
+                              "total": 0.0, "date": "", "payment_method": "efectivo", "category": "Varios"}
 
         expense = Expense(
             establishment_name=extracted_data.get("establishment_name", ""),
@@ -219,13 +185,11 @@ async def create_expense(expense_data: ExpenseCreate):
             image_base64=expense_data.image_base64 if expense_data.image_base64 and len(expense_data.image_base64) > 100 else None,
             raw_ocr_text=str(extracted_data)
         )
-
         expense_dict = expense.model_dump()
         await db.expenses.insert_one(expense_dict)
         return ExpenseResponse(**expense_dict)
-
     except Exception as e:
-        logger.error(f"Error creating expense: {e}")
+        logger.error(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/expenses/manual", response_model=ExpenseResponse)
@@ -245,13 +209,12 @@ async def create_manual_expense(expense_data: ExpenseManualCreate):
         await db.expenses.insert_one(expense_dict)
         return ExpenseResponse(**expense_dict)
     except Exception as e:
-        logger.error(f"Error creating manual expense: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/expenses", response_model=List[ExpenseResponse])
 async def get_expenses():
     expenses = await db.expenses.find().sort("created_at", -1).to_list(1000)
-    return [ExpenseResponse(**expense) for expense in expenses]
+    return [ExpenseResponse(**e) for e in expenses]
 
 @api_router.get("/expenses/{expense_id}", response_model=ExpenseResponse)
 async def get_expense(expense_id: str):
@@ -268,15 +231,15 @@ async def update_expense(expense_id: str, update_data: ExpenseUpdate):
     update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
     if update_dict:
         await db.expenses.update_one({"id": expense_id}, {"$set": update_dict})
-    updated_expense = await db.expenses.find_one({"id": expense_id})
-    return ExpenseResponse(**updated_expense)
+    updated = await db.expenses.find_one({"id": expense_id})
+    return ExpenseResponse(**updated)
 
 @api_router.delete("/expenses/{expense_id}")
 async def delete_expense(expense_id: str):
     result = await db.expenses.delete_one({"id": expense_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
-    return {"message": "Gasto eliminado correctamente"}
+    return {"message": "Gasto eliminado"}
 
 @api_router.delete("/expenses")
 async def delete_all_expenses():
@@ -288,11 +251,11 @@ async def toggle_payment_method(expense_id: str):
     expense = await db.expenses.find_one({"id": expense_id})
     if not expense:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
-    current_method = expense.get("payment_method", "efectivo").lower()
-    new_method = "tarjeta" if current_method == "efectivo" else "efectivo"
+    current = expense.get("payment_method", "efectivo").lower()
+    new_method = "tarjeta" if current == "efectivo" else "efectivo"
     await db.expenses.update_one({"id": expense_id}, {"$set": {"payment_method": new_method}})
-    updated_expense = await db.expenses.find_one({"id": expense_id})
-    return ExpenseResponse(**updated_expense)
+    updated = await db.expenses.find_one({"id": expense_id})
+    return ExpenseResponse(**updated)
 
 @api_router.get("/expenses/export/excel")
 async def export_expenses_excel():
@@ -306,10 +269,8 @@ async def export_expenses_excel():
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
     header_alignment = Alignment(horizontal="center", vertical="center")
-    thin_border = Border(
-        left=Side(style='thin'), right=Side(style='thin'),
-        top=Side(style='thin'), bottom=Side(style='thin')
-    )
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'),
+                         top=Side(style='thin'), bottom=Side(style='thin'))
 
     headers = ["Establecimiento", "CIF", "Dirección", "Teléfono", "Categoría", "Total (€)", "Fecha", "Método de Pago"]
 
@@ -320,21 +281,16 @@ async def export_expenses_excel():
             cell.fill = header_fill
             cell.alignment = header_alignment
             cell.border = thin_border
-        ws.column_dimensions['A'].width = 25
-        ws.column_dimensions['B'].width = 15
-        ws.column_dimensions['C'].width = 35
-        ws.column_dimensions['D'].width = 15
-        ws.column_dimensions['E'].width = 15
-        ws.column_dimensions['F'].width = 12
-        ws.column_dimensions['G'].width = 12
-        ws.column_dimensions['H'].width = 15
+        widths = [25, 15, 35, 15, 15, 12, 12, 15]
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[chr(64+i)].width = w
 
     setup_sheet(ws_all)
     setup_sheet(ws_tarjeta)
     setup_sheet(ws_efectivo)
 
-    row_all, row_tarjeta, row_efectivo = 2, 2, 2
-    total_all, total_tarjeta, total_efectivo = 0, 0, 0
+    row_all, row_t, row_e = 2, 2, 2
+    total_all, total_t, total_e = 0, 0, 0
 
     for expense in expenses:
         data = [
@@ -348,59 +304,53 @@ async def export_expenses_excel():
             expense.get("payment_method", "efectivo")
         ]
         for col, value in enumerate(data, 1):
-            cell = ws_all.cell(row=row_all, column=col, value=value)
-            cell.border = thin_border
+            ws_all.cell(row=row_all, column=col, value=value).border = thin_border
         row_all += 1
         total_all += expense.get("total", 0)
 
         if expense.get("payment_method", "").lower() == "tarjeta":
             for col, value in enumerate(data, 1):
-                cell = ws_tarjeta.cell(row=row_tarjeta, column=col, value=value)
-                cell.border = thin_border
-            row_tarjeta += 1
-            total_tarjeta += expense.get("total", 0)
+                ws_tarjeta.cell(row=row_t, column=col, value=value).border = thin_border
+            row_t += 1
+            total_t += expense.get("total", 0)
         else:
             for col, value in enumerate(data, 1):
-                cell = ws_efectivo.cell(row=row_efectivo, column=col, value=value)
-                cell.border = thin_border
-            row_efectivo += 1
-            total_efectivo += expense.get("total", 0)
+                ws_efectivo.cell(row=row_e, column=col, value=value).border = thin_border
+            row_e += 1
+            total_e += expense.get("total", 0)
 
-    def add_total_row(ws, row, total):
+    def add_total(ws, row, total):
         ws.cell(row=row, column=5, value="TOTAL:").font = Font(bold=True)
-        total_cell = ws.cell(row=row, column=6, value=total)
-        total_cell.font = Font(bold=True)
-        total_cell.number_format = '€#,##0.00'
+        c = ws.cell(row=row, column=6, value=total)
+        c.font = Font(bold=True)
+        c.number_format = '€#,##0.00'
 
-    add_total_row(ws_all, row_all, total_all)
-    add_total_row(ws_tarjeta, row_tarjeta, total_tarjeta)
-    add_total_row(ws_efectivo, row_efectivo, total_efectivo)
+    add_total(ws_all, row_all, total_all)
+    add_total(ws_tarjeta, row_t, total_t)
+    add_total(ws_efectivo, row_e, total_e)
 
     buffer = io.BytesIO()
     wb.save(buffer)
     buffer.seek(0)
     filename = f"gastos_efrain_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return StreamingResponse(
-        buffer,
+    return StreamingResponse(buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
+        headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 @api_router.get("/expenses/summary/stats")
 async def get_expenses_summary():
     expenses = await db.expenses.find().to_list(1000)
     total_general = sum(e.get("total", 0) for e in expenses)
-    total_tarjeta = sum(e.get("total", 0) for e in expenses if e.get("payment_method", "").lower() == "tarjeta")
-    total_efectivo = sum(e.get("total", 0) for e in expenses if e.get("payment_method", "").lower() != "tarjeta")
-    count_tarjeta = len([e for e in expenses if e.get("payment_method", "").lower() == "tarjeta"])
-    count_efectivo = len(expenses) - count_tarjeta
+    total_t = sum(e.get("total", 0) for e in expenses if e.get("payment_method", "").lower() == "tarjeta")
+    total_e = total_general - total_t
+    count_t = len([e for e in expenses if e.get("payment_method", "").lower() == "tarjeta"])
 
     categories_data = {}
     for cat in EXPENSE_CATEGORIES:
-        cat_expenses = [e for e in expenses if e.get("category", "Varios") == cat]
-        cat_total = sum(e.get("total", 0) for e in cat_expenses)
+        cat_exp = [e for e in expenses if e.get("category", "Varios") == cat]
+        cat_total = sum(e.get("total", 0) for e in cat_exp)
         categories_data[cat] = {
-            "count": len(cat_expenses),
+            "count": len(cat_exp),
             "total": round(cat_total, 2),
             "percentage": round((cat_total / total_general * 100) if total_general > 0 else 0, 1)
         }
@@ -408,8 +358,8 @@ async def get_expenses_summary():
     return {
         "total_expenses": len(expenses),
         "total_amount": round(total_general, 2),
-        "card_payments": {"count": count_tarjeta, "total": round(total_tarjeta, 2)},
-        "cash_payments": {"count": count_efectivo, "total": round(total_efectivo, 2)},
+        "card_payments": {"count": count_t, "total": round(total_t, 2)},
+        "cash_payments": {"count": len(expenses) - count_t, "total": round(total_e, 2)},
         "categories": categories_data
     }
 
@@ -424,11 +374,11 @@ async def export_expenses_pdf():
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24,
+    title_style = ParagraphStyle('T', parent=styles['Heading1'], fontSize=24,
         textColor=colors.HexColor('#4A90D9'), spaceAfter=30, alignment=1)
-    subtitle_style = ParagraphStyle('CustomSubtitle', parent=styles['Normal'], fontSize=12,
+    subtitle_style = ParagraphStyle('S', parent=styles['Normal'], fontSize=12,
         textColor=colors.HexColor('#666666'), spaceAfter=20, alignment=1)
-    section_style = ParagraphStyle('SectionTitle', parent=styles['Heading2'], fontSize=14,
+    section_style = ParagraphStyle('Se', parent=styles['Heading2'], fontSize=14,
         textColor=colors.HexColor('#333333'), spaceBefore=20, spaceAfter=10)
 
     elements = []
@@ -437,105 +387,97 @@ async def export_expenses_pdf():
     elements.append(Spacer(1, 20))
 
     total_general = sum(e.get("total", 0) for e in expenses)
-    total_tarjeta = sum(e.get("total", 0) for e in expenses if e.get("payment_method", "").lower() == "tarjeta")
-    total_efectivo = total_general - total_tarjeta
+    total_t = sum(e.get("total", 0) for e in expenses if e.get("payment_method", "").lower() == "tarjeta")
+    total_e = total_general - total_t
 
     elements.append(Paragraph("RESUMEN", section_style))
     summary_data = [
         ["Concepto", "Cantidad", "Importe"],
         ["Total de gastos", str(len(expenses)), f"€{total_general:.2f}"],
-        ["Pagos con tarjeta", str(len([e for e in expenses if e.get("payment_method", "").lower() == "tarjeta"])), f"€{total_tarjeta:.2f}"],
-        ["Pagos en efectivo", str(len([e for e in expenses if e.get("payment_method", "").lower() != "tarjeta"])), f"€{total_efectivo:.2f}"],
+        ["Pagos con tarjeta", str(len([e for e in expenses if e.get("payment_method","").lower()=="tarjeta"])), f"€{total_t:.2f}"],
+        ["Pagos en efectivo", str(len([e for e in expenses if e.get("payment_method","").lower()!="tarjeta"])), f"€{total_e:.2f}"],
     ]
-    summary_table = Table(summary_data, colWidths=[8*cm, 4*cm, 4*cm])
-    summary_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4A90D9')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F5F5F5')),
-        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#DDDDDD')),
-        ('FONTSIZE', (0, 1), (-1, -1), 10),
-        ('TOPPADDING', (0, 1), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+    t = Table(summary_data, colWidths=[8*cm, 4*cm, 4*cm])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#4A90D9')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 12),
+        ('BOTTOMPADDING', (0,0), (-1,0), 12),
+        ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#F5F5F5')),
+        ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#DDDDDD')),
+        ('FONTSIZE', (0,1), (-1,-1), 10),
+        ('TOPPADDING', (0,1), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,1), (-1,-1), 8),
     ]))
-    elements.append(summary_table)
+    elements.append(t)
     elements.append(Spacer(1, 20))
 
     elements.append(Paragraph("POR CATEGORÍAS", section_style))
     cat_data = [["Categoría", "Gastos", "Total", "%"]]
     for cat in EXPENSE_CATEGORIES:
-        cat_expenses = [e for e in expenses if e.get("category", "Varios") == cat]
-        cat_total = sum(e.get("total", 0) for e in cat_expenses)
+        cat_exp = [e for e in expenses if e.get("category", "Varios") == cat]
+        cat_total = sum(e.get("total", 0) for e in cat_exp)
         cat_pct = (cat_total / total_general * 100) if total_general > 0 else 0
-        if len(cat_expenses) > 0:
-            cat_data.append([cat, str(len(cat_expenses)), f"€{cat_total:.2f}", f"{cat_pct:.1f}%"])
+        if len(cat_exp) > 0:
+            cat_data.append([cat, str(len(cat_exp)), f"€{cat_total:.2f}", f"{cat_pct:.1f}%"])
 
     if len(cat_data) > 1:
-        cat_table = Table(cat_data, colWidths=[5*cm, 3*cm, 4*cm, 3*cm])
-        cat_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#27AE60')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F5F5F5')),
-            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#DDDDDD')),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('TOPPADDING', (0, 1), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ct = Table(cat_data, colWidths=[5*cm, 3*cm, 4*cm, 3*cm])
+        ct.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#27AE60')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,0), 11),
+            ('BOTTOMPADDING', (0,0), (-1,0), 10),
+            ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#F5F5F5')),
+            ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#DDDDDD')),
+            ('FONTSIZE', (0,1), (-1,-1), 10),
+            ('TOPPADDING', (0,1), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,1), (-1,-1), 6),
         ]))
-        elements.append(cat_table)
+        elements.append(ct)
     elements.append(Spacer(1, 20))
 
     elements.append(Paragraph("DETALLE DE GASTOS", section_style))
     if expenses:
-        expense_data = [["Fecha", "Establecimiento", "Categoría", "Método", "Total"]]
+        exp_data = [["Fecha", "Establecimiento", "Categoría", "Método", "Total"]]
         for exp in expenses:
-            expense_data.append([
+            exp_data.append([
                 exp.get("date", "Sin fecha"),
                 exp.get("establishment_name", "Sin nombre")[:25],
                 exp.get("category", "Varios"),
                 exp.get("payment_method", "efectivo").capitalize(),
                 f"€{exp.get('total', 0):.2f}"
             ])
-        expense_table = Table(expense_data, colWidths=[2.5*cm, 6*cm, 2.5*cm, 2.5*cm, 2.5*cm])
-        expense_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#9B59B6')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('TOPPADDING', (0, 1), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9F9F9')]),
+        et = Table(exp_data, colWidths=[2.5*cm, 6*cm, 2.5*cm, 2.5*cm, 2.5*cm])
+        et.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#9B59B6')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,0), 10),
+            ('BOTTOMPADDING', (0,0), (-1,0), 10),
+            ('BACKGROUND', (0,1), (-1,-1), colors.white),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#DDDDDD')),
+            ('FONTSIZE', (0,1), (-1,-1), 9),
+            ('TOPPADDING', (0,1), (-1,-1), 5),
+            ('BOTTOMPADDING', (0,1), (-1,-1), 5),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F9F9F9')]),
         ]))
-        elements.append(expense_table)
+        elements.append(et)
 
     doc.build(elements)
     buffer.seek(0)
     filename = f"informe_efrain_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    return StreamingResponse(
-        buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
+    return StreamingResponse(buffer, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 app.include_router(api_router)
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"],
+                   allow_methods=["*"], allow_headers=["*"])
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
