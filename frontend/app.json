@@ -4,15 +4,22 @@
     "slug": "efrain-gastos",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./frontend/assets/images/icon.png",
     "userInterfaceStyle": "automatic",
-    "android": {
-      "package": "com.efrain.gastos",
-      "adaptiveIcon": {
-        "backgroundColor": "#000000"
-      }
+    "splash": {
+      "image": "./frontend/assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true
+    },
+    "android": {
+      "package": "com.efrain.gastos",
+      "adaptiveIcon": {
+        "foregroundImage": "./frontend/assets/images/icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "extra": {
       "eas": {
