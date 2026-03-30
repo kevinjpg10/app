@@ -116,7 +116,7 @@ export default function Index() {
       <StatusBar style="light" />
       
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Mis Gastos IA 🤖</Text>
+        <Text style={styles.headerTitle}>Efrain Gastos</Text>
         <TouchableOpacity onPress={() => {
           setEditForm({ establishment_name: '', cif: '', address: '', phone: '', total: '', date: new Date().toLocaleDateString('es-ES'), payment_method: 'efectivo', category: 'Varios' });
           setShowManualForm(true);
