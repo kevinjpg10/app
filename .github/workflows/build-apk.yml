@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.19.4'
+          node-version: '20' # Versión estable
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -24,15 +24,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install dependencies
-        working-directory: ./frontend
-        run: yarn install --frozen-lockfile
+        # Asegúrate de que tu package.json esté en /frontend
+        working-directory: ./frontend 
+        run: yarn install
 
       - name: Expo prebuild
         working-directory: ./frontend
+        # Aquí es donde se crean los archivos de Android
         run: npx expo prebuild --platform android --no-install
 
       - name: Generate Keystore
@@ -54,6 +53,7 @@ jobs:
       - name: Configure signing in gradle
         working-directory: ./frontend/android
         run: |
+          # Este paso inyecta tu clave en el constructor de Android
           cat >> app/build.gradle << 'GRADLE'
 
           android {
@@ -68,24 +68,19 @@ jobs:
             buildTypes {
               release {
                 signingConfig signingConfigs.release
-                minifyEnabled false
-                shrinkResources false
               }
             }
           }
           GRADLE
 
-      - name: Make gradlew executable
-        working-directory: ./frontend/android
-        run: chmod +x gradlew
-
       - name: Build Release APK
         working-directory: ./frontend/android
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: efrain-gastos-release
+          name: rhino-gastos-apk
           path: frontend/android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 30
