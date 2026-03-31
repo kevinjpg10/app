@@ -82,8 +82,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-         - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
           name: efrain-gastos-apk
           path: frontend/android/app/build/outputs/apk/release/app-release.apk
