@@ -1,6 +1,6 @@
 {
   "expo": {
-   "name": "Efrain Gastos",
+    "name": "Efrain Gastos",
     "slug": "app-gastos",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,7 +22,26 @@
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.kevinjpg10.app"
-    }
+      "package": "com.kevinjpg10.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "tu-id-de-proyecto-si-lo-tienes"
+      }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "La aplicación necesita acceder a tus fotos para leer los tickets.",
+          "cameraPermission": "La aplicación necesita acceder a la cámara para escanear los tickets."
+        }
+      ]
+    ]
   }
 }
