@@ -1,47 +1,40 @@
 {
   "expo": {
     "name": "Efrain Gastos",
-    "slug": "app-gastos",
+    "slug": "efrain-gastos",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/images/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0a"
       },
-      "package": "com.kevinjpg10.app",
+      "package": "com.efrain.gastos",
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
       ]
-    },
-    "extra": {
-      "eas": {
-        "projectId": "tu-id-de-proyecto-si-lo-tienes"
-      }
     },
     "plugins": [
       [
-        "expo-image-picker",
+        "expo-build-properties",
         {
-          "photosPermission": "La aplicación necesita acceder a tus fotos para leer los tickets.",
-          "cameraPermission": "La aplicación necesita acceder a la cámara para escanear los tickets."
+          "android": {
+            "kotlinVersion": "1.9.24"
+          }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      }
+    }
   }
 }
