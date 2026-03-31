@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # Versión estable
+          node-version: '20'
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -25,13 +25,15 @@ jobs:
           distribution: 'temurin'
 
       - name: Install dependencies
-        # Asegúrate de que tu package.json esté en /frontend
         working-directory: ./frontend 
         run: yarn install
 
       - name: Expo prebuild
         working-directory: ./frontend
-        # Aquí es donde se crean los archivos de Android
+        # Inyectamos las variables AQUÍ para que se guarden dentro del APK
+        env:
+          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
+          EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
         run: npx expo prebuild --platform android --no-install
 
       - name: Generate Keystore
@@ -53,9 +55,7 @@ jobs:
       - name: Configure signing in gradle
         working-directory: ./frontend/android
         run: |
-          # Este paso inyecta tu clave en el constructor de Android
           cat >> app/build.gradle << 'GRADLE'
-
           android {
             signingConfigs {
               release {
@@ -75,6 +75,10 @@ jobs:
 
       - name: Build Release APK
         working-directory: ./frontend/android
+        # Volvemos a pasar las variables por si acaso durante la compilación final
+        env:
+          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
+          EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
