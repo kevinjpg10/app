@@ -29,7 +29,8 @@
             "kotlinVersion": "1.9.24"
           }
         }
-      ]
+      ],
+      "expo-router"
     ],
     "extra": {
       "router": {
