@@ -255,7 +255,13 @@ async def create_manual_expense(expense_data: ExpenseManualCreate):
 
 @api_router.get("/expenses", response_model=List[ExpenseResponse])
 async def get_expenses():
-    expenses = await db.expenses.find().sort("created_at", -1).to_list(1000)
+    # Projection to fetch only needed fields, excluding large image_base64 for list view
+    projection = {
+        "id": 1, "establishment_name": 1, "cif": 1, "address": 1, "phone": 1,
+        "total": 1, "date": 1, "payment_method": 1, "category": 1, "created_at": 1,
+        "image_base64": 1, "_id": 0
+    }
+    expenses = await db.expenses.find({}, projection).sort("created_at", -1).to_list(1000)
     return [ExpenseResponse(**expense) for expense in expenses]
 
 @api_router.get("/expenses/{expense_id}", response_model=ExpenseResponse)
@@ -305,7 +311,9 @@ async def toggle_payment_method(expense_id: str):
 
 @api_router.get("/expenses/summary/stats")
 async def get_expenses_summary():
-    expenses = await db.expenses.find().to_list(1000)
+    # Projection to fetch only needed fields for calculations
+    projection = {"total": 1, "payment_method": 1, "category": 1, "_id": 0}
+    expenses = await db.expenses.find({}, projection).to_list(1000)
     
     total_general = sum(e.get("total", 0) for e in expenses)
     total_tarjeta = sum(e.get("total", 0) for e in expenses if e.get("payment_method", "").lower() == "tarjeta")
@@ -334,7 +342,12 @@ async def get_expenses_summary():
 
 @api_router.get("/expenses/export/excel")
 async def export_expenses_excel():
-    expenses = await db.expenses.find().sort("created_at", -1).to_list(1000)
+    # Exclude image_base64 for better performance
+    projection = {
+        "establishment_name": 1, "cif": 1, "address": 1, "phone": 1,
+        "total": 1, "date": 1, "category": 1, "payment_method": 1, "created_at": 1, "_id": 0
+    }
+    expenses = await db.expenses.find({}, projection).sort("created_at", -1).to_list(1000)
     
     wb = openpyxl.Workbook()
     ws_all = wb.active
@@ -416,7 +429,12 @@ async def export_expenses_excel():
 
 @api_router.get("/expenses/export/pdf")
 async def export_expenses_pdf():
-    expenses = await db.expenses.find().sort("created_at", -1).to_list(1000)
+    # Projection to fetch only needed fields for PDF report
+    projection = {
+        "establishment_name": 1, "cif": 1, "address": 1, "phone": 1,
+        "total": 1, "date": 1, "category": 1, "payment_method": 1, "created_at": 1, "_id": 0
+    }
+    expenses = await db.expenses.find({}, projection).sort("created_at", -1).to_list(1000)
     
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
